@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MINDSET News | Personalized Feed</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        [x-cloak] { display: none !important; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .news-card { animation: fadeIn 0.3s ease-out; }
+    </style>
+</head>
+<body>
+    
+    <!-- App Container -->
+    <div id="app-container" class="min-h-screen">
+
+        <!-- Header -->
+        <header class="bg-white shadow-md sticky top-0 z-20">
+            <nav class="container mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
+                <h1 class="text-2xl font-bold text-blue-600">MINDSET News</h1>
+                <div class="flex items-center space-x-4">
+                    <span id="user-display" class="text-sm text-gray-600 hidden"></span>
+                    <button id="auth-button" class="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                        Login
+                    </button>
+                </div>
+            </nav>
+        </header>
+
+        <!-- Main Content: Hidden until logged in -->
+        <main id="main-content" class="container mx-auto p-4 sm:p-6 lg:p-8 hidden">
+            
+            <!-- Search Bar -->
+            <form id="search-form" class="mb-8">
+                <label for="search-input" class="block text-lg font-medium text-gray-700 mb-2">Search News</label>
+                <input type="search" id="search-input" placeholder="e.g., 'Tom Brady' or 'Ukraine'" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            </form>
+
+            <!-- Feeds Container -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <!-- Left Column: Personalized & Search -->
+                <div class="lg:col-span-2 space-y-8">
+                    
+                    <!-- Personalized Feed -->
+                    <section id="recommendation-section">
+                        <h2 class="text-2xl font-bold mb-4 border-b border-gray-300 pb-2">For You (Personalized)</h2>
+                        <div id="recommendation-feed" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Personalized articles go here -->
+                        </div>
+                    </section>
+                    
+                    <!-- Search Results Feed -->
+                    <section id="search-section" class="hidden">
+                        <h2 class="text-2xl font-bold mb-4 border-b border-gray-300 pb-2">Search Results</h2>
+                        <div id="search-feed" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Search results go here -->
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Right Column: Popular -->
+                <div class="lg:col-span-1">
+                    <section id="popular-section" class="bg-white p-6 rounded-lg shadow-md">
+                        <h2 class="text-2xl font-bold mb-4 border-b border-gray-300 pb-2">Top Stories (Popular)</h2>
+                        <div id="popular-feed" class="space-y-6">
+                            <!-- Popular articles go here -->
+                        </div>
+                    </section>
+                </div>
+                
+            </div>
+        </main>
+
+        <!-- Login Prompt: Hidden when logged in -->
+        <div id="login-prompt" class="container mx-auto p-8 text-center mt-10">
+            <h2 class="text-2xl font-bold text-gray-800">Welcome to MINDSET News</h2>
+            <p class="text-gray-600 mt-2">Please log in to access your personalized news feed and search articles.</p>
+        </div>
+
+    </div>
+
+    <!-- Custom Modal for Messages -->
+    <div id="message-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-30 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+            <p id="modal-message" class_="text-lg"></p>
+            <button id="modal-close-button" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md">Close</button>
+        </div>
+    </div>
+
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken,
+            onAuthStateChanged,
+            signOut
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc,
+            arrayUnion
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Config (Injected by Environment) ---
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        let app, auth, db;
+        let currentUserId = null;
+
+        // --- Embedded News Database (Sample from news.tsv) ---
+        const newsDatabase = {
+            "N55689": { "category": "sports", "title": "Patriots reportedly trade Michael Bennett to Cowboys", "abstract": "The New England Patriots are trading defensive end Michael Bennett to the Dallas Cowboys..." },
+            "N35729": { "category": "sports", "title": "Should NFL fine Baker Mayfield for criticizing officials?", "abstract": "ProFootballTalk's Mike Florio and Chris Simms debate whether Baker Mayfield should be fined..." },
+            "N33619": { "category": "sports", "title": "How Antonio Brown reportedly blew $30M in just 6 months", "abstract": "Antonio Brown is apparently burning through his money at an alarming rate." },
+            "N53585": { "category": "news", "title": "A 2-year-old boy was found alive after being reported missing in woods", "abstract": "A 2-year-old boy who was reported missing Wednesday in the woods of Michigan's Upper Peninsula has been found alive." },
+            "N63970": { "category": "sports", "title": "Tom Brady weighs in on Patriots' struggling offense", "abstract": "The New England Patriots' offense has been sputtering, and Tom Brady knows they need to be better." },
+            "N50107": { "category": "sports", "title": "Giants' Daniel Jones' status for Cardinals game in question", "abstract": "New York Giants quarterback Daniel Jones (ankle) is in question for Week 7 against the Arizona Cardinals." },
+            "N60272": { "category": "sports", "title": "Jalen Ramsey says he's 'blessed' to be with Rams", "abstract": "Jalen Ramsey is thrilled to be with the Los Angeles Rams, saying he's 'blessed' to be part of the organization." },
+            "N58086": { "category": "finance", "title": "How to avoid costly 401(k) mistakes", "abstract": "These common 401(k) blunders could cost you a fortune in retirement. Here's how to steer clear of them." },
+            "N38215": { "category": "sports", "title": "Report: Patriots' Josh Gordon (knee) 'likely' to be placed on IR", "abstract": "The New England Patriots are likely to place wide receiver Josh Gordon on injured reserve, according to NFL Network." },
+            "N61787": { "category": "sports", "title": "Zion Williamson to miss start of NBA season after knee surgery", "abstract": "New Orleans Pelicans rookie Zion Williamson will miss the start of the NBA season after undergoing knee surgery." },
+            "N23590": { "category": "sports", "title": "Browns' Mayfield bristles at reporter's question", "abstract": "Cleveland Browns quarterback Baker Mayfield bristled at a reporter's question after his team's loss." },
+            "N39937": { "category": "news", "title": "Democrats walk out of White House meeting on Syria", "abstract": "House Speaker Nancy Pelosi and other top Democrats walked out of a White House meeting on Syria with President Trump." },
+            "N43468": { "category": "finance", "title": "Bank of America profits dip as low rates weigh", "abstract": "Bank of America's third-quarter profits fell as low interest rates weighed on its lending business." },
+            "N18280": { "category": "lifestyle", "title": "Meghan Markle rewore her wedding reception dress, and it's stunning", "abstract": "Meghan Markle rewore her gorgeous Stella McCartney wedding reception dress to an event." },
+            "N21175": { "category": "autos", "title": "The 2020 C8 Corvette Stingray is even quicker than Chevy promised", "abstract": "Chevy's 2020 C8 Corvette Stingray is officially quicker than promised, hitting 60 mph in 2.9 seconds." },
+            "N55528": { "category": "lifestyle", "title": "The Brands Queen Elizabeth, Prince Charles, and Kate Middleton Swear By", "abstract": "Shop the notebooks, jackets, and more that the royal family can't live without." },
+            "N19639": { "category": "health", "title": "50 Worst Habits For Belly Fat", "abstract": "These seemingly harmless habits are holding you back from the flat stomach you're working toward." },
+            "N61837": { "category": "news", "title": "The Cost of Trump's Aid Freeze in the Trenches of Ukraine's War", "abstract": "Lt. Ivan Molchanets peeked over a parapet of sandbags at the enemy position..." },
+            "N53526": { "category": "health", "title": "I Was An NBA Wife. Here's How It Affected My Mental Health.", "abstract": "I felt like I was a fraud, and being an NBA wife didn't help that at all." },
+            "N16909": { "category": "weather", "title": "Adapting, Learning And Soul Searching: Reflecting On A Year Since The Woolsey Fire", "abstract": "Woolsey Fire Anniversary: A community is forever changed, forever trying to heal." },
+            "N47585": { "category": "lifestyle", "title": "Family says 13-year-old Broadway star died from 'massive asthma attack'", "abstract": "Laurel Griggs' family is speaking out about the 13-year-old Broadway star's death." },
+            "N7482": { "category": "sports", "title": "St. Dominic soccer player tries to kick cancer back to sidelines", "abstract": "Sometimes, what happens on the sidelines can be more important than the game itself." },
+            "N34418": { "category": "sports", "title": "How the Sounders won MLS Cup", "abstract": "Mark, Jeremiah and Casey were so excited they couldn't help but record a podcast after the game." }
+        };
+
+        // Popularity Model Results (From your notebook)
+        const popularNewsIds = ["N55689", "N35729", "N33619", "N53585", "N63970"];
+
+        // --- DOM Elements ---
+        const authButton = document.getElementById('auth-button');
+        const userDisplay = document.getElementById('user-display');
+        const mainContent = document.getElementById('main-content');
+        const loginPrompt = document.getElementById('login-prompt');
+        const searchForm = document.getElementById('search-form');
+        const searchInput = document.getElementById('search-input');
+        const recFeed = document.getElementById('recommendation-feed');
+        const searchFeed = document.getElementById('search-feed');
+        const searchSection = document.getElementById('search-section');
+        const popularFeed = document.getElementById('popular-feed');
+        const modal = document.getElementById('message-modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCloseButton = document.getElementById('modal-close-button');
+
+
+        // --- App Initialization ---
+        function initializeApp() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+            } catch (e) {
+                console.error("Firebase initialization failed:", e);
+                loginPrompt.innerHTML = "<h2 class='text-2xl font-bold text-red-600'>Error: Could not connect to backend.</h2>";
+                return;
+            }
+
+            authButton.addEventListener('click', handleAuth);
+            modalCloseButton.addEventListener('click', () => modal.classList.add('hidden'));
+            searchForm.addEventListener('submit', handleSearch);
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    // User is signed in
+                    currentUserId = user.uid;
+                    userDisplay.textContent = `User: ${user.uid.substring(0, 8)}...`;
+                    userDisplay.classList.remove('hidden');
+                    authButton.textContent = 'Logout';
+                    mainContent.classList.remove('hidden');
+                    loginPrompt.classList.add('hidden');
+                    
+                    loadApp(currentUserId);
+                } else {
+                    // User is signed out
+                    currentUserId = null;
+                    userDisplay.classList.add('hidden');
+                    authButton.textContent = 'Login';
+                    mainContent.classList.add('hidden');
+                    loginPrompt.classList.remove('hidden');
+                }
+            });
+        }
+
+        /**
+         * Handles Login/Logout
+         */
+        async function handleAuth() {
+            if (currentUserId) {
+                // User is logged in, so log them out
+                await signOut(auth);
+            } else {
+                // User is logged out, so log them in
+                try {
+                    authButton.disabled = true;
+                    authButton.textContent = 'Logging in...';
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth); // Fallback for local testing
+                    }
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                    showMessage("Login failed. Please try again.");
+                } finally {
+                    authButton.disabled = false;
+                }
+            }
+        }
+
+        /**
+         * Load all data once user is authenticated
+         */
+        function loadApp(userId) {
+            renderPopularNews();
+            renderPersonalizedNews(userId);
+            searchSection.classList.add('hidden');
+            searchFeed.innerHTML = '';
+            searchInput.value = '';
+        }
+
+        // --- Model & Rendering Logic ---
+
+        /**
+         * Renders the "Popular" news feed.
+         */
+        function renderPopularNews() {
+            popularFeed.innerHTML = '';
+            popularNewsIds.forEach(newsId => {
+                const card = createNewsCard(newsId);
+                if (card) {
+                    popularFeed.appendChild(card);
+                }
+            });
+        }
+
+        /**
+         * Renders the "Personalized" news feed based on user history.
+         * This is the core of our "model".
+         */
+        async function renderPersonalizedNews(userId) {
+            recFeed.innerHTML = '<p class="text-gray-500">Calculating recommendations...</p>';
+            
+            const profile = await getUserProfile(userId);
+
+            if (!profile.hasHistory) {
+                recFeed.innerHTML = '<p class="text-gray-500">Click on articles to build your personalized feed!</p>';
+                return;
+            }
+
+            // This IS the model: score all articles against the user's profile
+            const allNews = Object.keys(newsDatabase);
+            const recommendations = allNews.map(newsId => {
+                const article = newsDatabase[newsId];
+                const category = article.category;
+                let score = 0;
+                
+                if (profile.preferences[category]) {
+                    score = profile.preferences[category] / profile.totalClicks;
+                }
+                
+                return { newsId, score };
+            })
+            .filter(item => item.score > 0) // Only show articles with some relevance
+            .sort((a, b) => b.score - a.score); // Sort by highest score
+
+            // Render the results
+            recFeed.innerHTML = '';
+            if (recommendations.length === 0) {
+                 recFeed.innerHTML = '<p class="text-gray-500">Click on articles to build your personalized feed!</p>';
+                 return;
+            }
+
+            recommendations.forEach(rec => {
+                const card = createNewsCard(rec.newsId, rec.score);
+                if (card) {
+                    recFeed.appendChild(card);
+                }
+            });
+        }
+
+        /**
+         * Handles the search form submission.
+         */
+        async function handleSearch(event) {
+            event.preventDefault();
+            const query = searchInput.value.toLowerCase().trim();
+            if (!query) {
+                searchSection.classList.add('hidden');
+                return;
+            }
+
+            searchFeed.innerHTML = '';
+            searchSection.classList.remove('hidden');
+
+            let resultsFound = 0;
+            Object.keys(newsDatabase).forEach(newsId => {
+                const article = newsDatabase[newsId];
+                if (article.title.toLowerCase().includes(query) || article.abstract.toLowerCase().includes(query)) {
+                    const card = createNewsCard(newsId);
+                    if (card) {
+                        searchFeed.appendChild(card);
+                        resultsFound++;
+                    }
+                }
+            });
+
+            if (resultsFound === 0) {
+                searchFeed.innerHTML = `<p class="text-gray-500">No articles found matching '${query}'.</p>`;
+            }
+        }
+
+
+        /**
+         * Creates a DOM element for a news card.
+         * @param {string} newsId - The ID of the article.
+         * @param {number|null} score - The recommendation score, if applicable.
+         */
+        function createNewsCard(newsId, score = null) {
+            const article = newsDatabase[newsId];
+            if (!article) return null;
+
+            const card = document.createElement('div');
+            card.className = "news-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col cursor-pointer hover:shadow-xl transition-shadow";
+            
+            let scoreBadge = '';
+            if (score !== null) {
+                scoreBadge = `<span class="absolute top-2 right-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded">Score: ${score.toFixed(2)}</span>`;
+            }
+
+            card.innerHTML = `
+                <div class="relative">
+                    <img src="https://placehold.co/600x400/3B82F6/FFFFFF?text=${article.category}" alt="${article.category}" class="h-48 w-full object-cover">
+                    ${scoreBadge}
+                </div>
+                <div class="p-4 flex-grow flex flex-col">
+                    <span class="text-xs font-semibold uppercase text-blue-600 mb-1">${article.category}</span>
+                    <h3 class="text-xl font-bold mb-2 text-gray-900">${article.title}</h3>
+                    <p class="text-gray-600 text-sm flex-grow">${article.abstract}</p>
+                </div>
+            `;
+
+            // --- THIS IS THE FEEDBACK LOOP ---
+            card.addEventListener('click', () => {
+                handleArticleClick(article.category);
+            });
+            return card;
+        }
+
+        // --- Firestore Database Functions ---
+
+        /**
+         * Fetches the user's category preferences from Firestore.
+         */
+        async function getUserProfile(userId) {
+            const docRef = doc(db, `artifacts/${appId}/users/${userId}/history`, "clicks");
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists() && docSnap.data().categories) {
+                    const categories = docSnap.data().categories; // e.g., ['sports', 'news', 'sports']
+                    const preferences = {};
+                    let totalClicks = 0;
+                    
+                    for (const category of categories) {
+                        preferences[category] = (preferences[category] || 0) + 1;
+                        totalClicks++;
+                    }
+                    
+                    return { hasHistory: true, preferences, totalClicks };
+                } else {
+                    return { hasHistory: false }; // New user
+                }
+            } catch (error) {
+                console.error("Error fetching user profile:", error);
+                return { hasHistory: false };
+            }
+        }
+
+        /**
+         * Logs a user's click to their profile in Firestore.
+         */
+        async function handleArticleClick(category) {
+            if (!currentUserId) return; // Shouldn't happen, but good to check
+
+            const docRef = doc(db, `artifacts/${appId}/users/${currentUserId}/history`, "clicks");
+            try {
+                // Atomically add this category to the user's history
+                await setDoc(docRef, { 
+                    categories: arrayUnion(category) 
+                }, { merge: true });
+                
+                showMessage(`Preference for "${category}" saved! Your feed is updating.`);
+                
+                // --- REAL-TIME UPDATE ---
+                // Immediately refresh the recommendations
+                await renderPersonalizedNews(currentUserId);
+
+            } catch (error) {
+                console.error("Error saving click:", error);
+                showMessage("Error saving your preference.");
+            }
+        }
+        
+        /**
+         * Shows a simple modal message.
+         */
+        function showMessage(message) {
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+        }
