@@ -1,4 +1,4 @@
-1. Project Overview
+# 1. Project Overview
 
 The system predicts whether a user will click on a specific news article based on their historical reading behavior. It processes large-scale news data and user logs to build:
 
@@ -9,24 +9,24 @@ Collaborative Filtering: Implementing SVD (Singular Value Decomposition) and KNN
 Deep Learning Models: Implementing Neural Collaborative Filtering (NCF) and sequence-based models using LSTM and GRU in TensorFlow.
 
 
-2. Environment Setup
+# 2. Environment Setup
 
 To run this notebook, we need a Python environment with the following libraries installed:
 
-# Core Data Processing
+a. Core Data Processing
 pip install pandas numpy tqdm
 
-# Visualization
+b. Visualization
 pip install matplotlib seaborn wordcloud
 
-# Machine Learning & NLP
+c. Machine Learning & NLP
 pip install scikit-learn gensim scikit-surprise
 
-# Deep Learning
+d. Deep Learning
 pip install tensorflow
 
 
-3. Data Requirements
+# 3. Data Requirements
 
 The code expects two primary tab-separated (.tsv) files in the same directory as the notebook:
 
@@ -35,7 +35,7 @@ a. news.tsv: Contains article metadata (news_id, category, subcategory, title, a
 b. behaviors.tsv: Contains user logs (user_id, time, history of clicked news, and impression logs).
 
 
-4. Step-by-Step Execution
+# 4. Step-by-Step Execution
 
 Step 1: Data Preprocessing
 
@@ -74,7 +74,7 @@ AUC-ROC: To measure the model's ability to distinguish between clicked and non-c
 NDCG: To evaluate the ranking quality of recommendations.
 
 
-5. Running the Code
+# 5. Running the Code
 
 Open the News Recommendation.ipynb in Jupyter Notebook or Google Colab.
 
