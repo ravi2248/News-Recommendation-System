@@ -14,15 +14,19 @@ Deep Learning Models: Implementing Neural Collaborative Filtering (NCF) and sequ
 To run this notebook, we need a Python environment with the following libraries installed:
 
 a. Core Data Processing
+
 pip install pandas numpy tqdm
 
 b. Visualization
+
 pip install matplotlib seaborn wordcloud
 
 c. Machine Learning & NLP
+
 pip install scikit-learn gensim scikit-surprise
 
 d. Deep Learning
+
 pip install tensorflow
 
 
